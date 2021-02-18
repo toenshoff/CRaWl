@@ -1,0 +1,21 @@
+{
+    "name": "default",
+    "vn": 1,
+    "pool": "mean",
+    "steps": 40,
+    "win_size": 8,
+    "train_start_ratio": 0.25,
+    "walk_mode": "nb",
+    "hidden_dim": 250,
+    "layers": 5,
+    "kernel_size": 5,
+    "graph_out": "linear",
+    "dropout": 0.5,
+    "epochs": 300,
+    "lr": 0.001,
+    "weight_decay": 0.0,
+    "batch_size": 100,
+    "decay_factor": 0.5,
+    "patience": 5,
+    "eval_rep": 1
+}
