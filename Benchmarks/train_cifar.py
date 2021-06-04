@@ -1,6 +1,7 @@
 import sys
 sys.path.append('.')
 import torch
+from torch.nn import CrossEntropyLoss
 from torch_geometric.datasets import GNNBenchmarkDataset
 from data_utils import preproc, CRaWlLoader
 from models import CRaWl
@@ -25,7 +26,6 @@ def load_split_data():
         val_graphs = list(GNNBenchmarkDataset(DATA_PATH, DATA_NAME, split='val', transform=preproc))
         test_graphs = list(GNNBenchmarkDataset(DATA_PATH, DATA_NAME, split='test', transform=preproc))
 
-        os.makedirs(DATA_PATH, exist_ok=True)
         torch.save((train_graphs, val_graphs, test_graphs), PCKL_PATH)
 
     return train_graphs, val_graphs, test_graphs
@@ -33,7 +33,7 @@ def load_split_data():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default='configs/CIFAR10/default.json', help="path to config file")
+    parser.add_argument("--config", type=str, default='configs/CIFAR10/default_old.json', help="path to config file")
     parser.add_argument("--name", type=str, default='CRaWl', help="path to config file")
     parser.add_argument("--gpu", type=int, default=0, help="id of gpu to be used for training")
     parser.add_argument("--seed", type=int, default=0, help="the random seed for torch and numpy")
@@ -50,10 +50,10 @@ def main():
     model_dir = f'models/CIFAR10/{config["name"]}/{args.name}'
 
     train_graphs, val_graphs, _ = load_split_data()
-    train_iter = CRaWlLoader(train_graphs, batch_size=config['batch_size'], num_workers=4, shuffle=True)
-    val_iter = CRaWlLoader(val_graphs, batch_size=100, num_workers=4)
+    train_iter = CRaWlLoader(train_graphs, batch_size=config['batch_size'], num_workers=8, shuffle=True)
+    val_iter = CRaWlLoader(val_graphs, batch_size=100, num_workers=8)
 
-    model = CRaWl(model_dir, config, num_node_feat, num_edge_feat, num_classes)
+    model = CRaWl(model_dir, config, num_node_feat, num_edge_feat, num_classes, loss=CrossEntropyLoss())
     model.save()
     train(model, train_iter, val_iter, device=device)
 

@@ -1,1 +1,1 @@
-python test_mnist.py --split test --model_dir 'models/MNIST/default/*' --reps 10 --seed 0 --steps 100
+python Benchmarks/test_mnist.py --model_dir 'models/MNIST/default/*' --steps 150 --seed 0 --reps 10 --split test

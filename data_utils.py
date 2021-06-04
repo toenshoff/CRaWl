@@ -10,9 +10,6 @@ from torch_scatter import scatter_sum
 def preproc(data):
     """ Preprocess Pytorch Geometric data objects to be used with our walk generator """
 
-    if data.num_edges == 0:
-        return data
-
     if not data.is_coalesced():
         data.coalesce()
 
@@ -27,12 +24,12 @@ def preproc(data):
     node_feat = data.x
 
     # remove isolated nodes
-    if data.contains_isolated_nodes():
-        edge_idx, edge_feat, mask = pygeo.utils.remove_isolated_nodes(edge_idx, edge_feat, data.num_nodes)
-        node_feat = node_feat[mask]
+    #if data.contains_isolated_nodes():
+    #    edge_idx, edge_feat, mask = pygeo.utils.remove_isolated_nodes(edge_idx, edge_feat, data.num_nodes)
+    #    node_feat = node_feat[mask]
 
     # Enforce undirected graphs
-    if not pygeo.utils.is_undirected(edge_idx):
+    if edge_idx.shape[1] > 0 and not pygeo.utils.is_undirected(edge_idx):
         x = edge_feat.detach().numpy()
         e = edge_idx.detach().numpy()
         x_map = {(e[0,i], e[1,i]): x[i] for i in range(e.shape[1])}
@@ -45,23 +42,23 @@ def preproc(data):
     data.edge_attr = edge_feat
     data.x = node_feat
 
-    if not torch.is_tensor(data.y):
-        data.y = torch.tensor(data.y)
-    data.y = data.y.view(1, -1)
-
     order = node_feat.shape[0]
 
     # create bitwise encoding of adjacency matrix using 64-bit integers
     data.node_id = torch.arange(0, order)
     bit_id = torch.zeros((order, order // 63 + 1), dtype=torch.int64)
     bit_id[data.node_id, data.node_id // 63] = torch.tensor(1) << data.node_id % 63
-    data.adj_bits = scatter_sum(bit_id[edge_idx[0]], edge_idx[1], dim=0)
+    data.adj_bits = scatter_sum(bit_id[edge_idx[0]], edge_idx[1], dim=0, dim_size=data.num_nodes)
 
     # compute node offsets in the adjacency list
-    data.degrees = pygeo.utils.degree(edge_idx[0], dtype=torch.int64)
+    data.degrees = pygeo.utils.degree(edge_idx[0], dtype=torch.int64, num_nodes=data.num_nodes)
     adj_offset = torch.zeros((order,), dtype=torch.int64)
     adj_offset[1:] = torch.cumsum(data.degrees, dim=0)[:-1]
     data.adj_offset = adj_offset
+
+    if not torch.is_tensor(data.y):
+        data.y = torch.tensor(data.y)
+    data.y = data.y.view(1, -1)
 
     return data
 
@@ -75,6 +72,7 @@ def merge_batch(graph_data):
 
     num_nodes = torch.tensor([d.shape[0] for d in degrees])
     num_edges = torch.tensor([e.shape[1] for e in edge_idx])
+    num_graphs = len(graph_data)
 
     x_node = torch.cat([d.x for d in graph_data], dim=0)
     x_edge = torch.cat([d.edge_attr for d in graph_data], dim=0)
@@ -107,10 +105,12 @@ def merge_batch(graph_data):
 
     data = Data(x=x_node, edge_index=edge_idx, edge_attr=x_edge, y=y)
     data.batch = node_graph_idx
+    data.edge_batch = edge_graph_idx
     data.adj_offset = adj_offset
     data.degrees = degrees
     data.graph_offset = graph_offset
     data.order = num_nodes
+    data.num_graphs = num_graphs
     data.node_id = node_id
     data.adj_bits = adj_bits
     return data

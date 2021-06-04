@@ -1,8 +1,5 @@
 import torch
-import torch.nn.functional as F
 import numpy as np
-import os
-import json
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -26,13 +23,13 @@ def eval(model, iter, repeats=5, device=default_device):
         for data in iter:
             data = data.to(device)
             y = data.y
-            logits = model(data)
+            data = model(data)
 
             if binary:
-                y_pred = torch.sigmoid(logits)
+                y_pred = torch.sigmoid(data.y_pred)
                 correct = torch._cast_Int(y_pred > 0.5).eq(y).sum()
             else:
-                correct = logits.argmax(dim=1).eq(y.reshape(-1)).sum()
+                correct = data.y_pred.argmax(dim=1).eq(y.reshape(-1)).sum()
 
             eq += correct.cpu().detach().numpy()
             total += float(y.shape[0])
@@ -43,7 +40,6 @@ def eval(model, iter, repeats=5, device=default_device):
 
 def train(model, train_iter, val_iter, device=default_device):
     writer = SummaryWriter(model.model_dir)
-    res_path = os.path.join(model.model_dir, 'results.json')
 
     model.to(device)
     opt = torch.optim.Adam(model.parameters(), lr=model.config['lr'], weight_decay=model.config['weight_decay'])
@@ -53,9 +49,6 @@ def train(model, train_iter, val_iter, device=default_device):
     walk_start_p = model.config['train_start_ratio']
 
     best_val_acc = 0.0
-    best_train_acc = 0.0
-
-    binary = model.out_dim == 1
 
     for e in range(1, max_epochs+1):
         train_acc = []
@@ -64,25 +57,18 @@ def train(model, train_iter, val_iter, device=default_device):
         model.train()
         for data in train_iter:
             data = data.to(device)
-            y = data.y
             opt.zero_grad()
-            logits = model(data, walk_start_p=walk_start_p)
 
-            if binary:
-                y_pred = torch.sigmoid(logits)
-                loss = F.binary_cross_entropy(y_pred, torch._cast_Float(y), reduction='mean')
-                acc = torch._cast_Int(y_pred > 0.5).eq(y).sum() / float(y.shape[0])
-            else:
-                loss = F.cross_entropy(logits, y.reshape(-1), reduction='mean')
-                acc = logits.argmax(dim=1).eq(y.reshape(-1)).sum() / float(y.shape[0])
+            data = model(data, walk_start_p=walk_start_p)
 
+            data.y = data.y.view(-1)
+            loss = model.loss(data)
             loss.backward()
             opt.step()
 
+            acc = data.y_pred.argmax(dim=1).eq(data.y.reshape(-1)).sum() / float(data.y.shape[0])
             train_acc.append(acc.cpu().detach().numpy())
             train_loss.append(loss.cpu().detach().numpy())
-
-        torch.cuda.empty_cache()
 
         train_acc = np.mean(train_acc)
         train_loss = np.mean(train_loss)
@@ -94,12 +80,7 @@ def train(model, train_iter, val_iter, device=default_device):
 
         if val_acc >= best_val_acc:
             best_val_acc = val_acc
-            best_train_acc = train_acc
             model.save()
-
-            with open(res_path, 'w') as f:
-                json.dump({'train': {'score': float(train_acc), 'std': 0.0},
-                           'val': {'score': float(val_acc), 'std': float(val_std)}}, f, indent=4)
 
         print(f'Epoch {e + 1} Loss: {train_loss:.4f}, Train: {train_acc:.4f}, Val: {val_acc:.4f} (+-{val_std:.4f})')
 

@@ -36,7 +36,7 @@ def main():
         mean_list.append(mean)
         std_list.append(std)
 
-    print(f'Mean Score {np.mean(mean_list)} (+-{np.std(mean_list)}), Mean STD {np.mean(std_list)}')
+    print(f'Mean Score {np.mean(mean_list):.5f} (+-{np.std(mean_list):.5f} CMD) (+-{np.mean(std_list):.5f} IMD)')
 
 
 if __name__ == '__main__':

@@ -1,9 +1,9 @@
 import sys
 sys.path.append('.')
 import torch
+from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
 from torch_geometric.datasets import TUDataset
-from torch_geometric.utils import degree
 import numpy as np
 from data_utils import preproc, CRaWlLoader
 from models import CRaWl
@@ -56,7 +56,8 @@ def train(model, train_iter, val_iter):
                 data = data.to(device)
                 y = data.y
                 opt.zero_grad()
-                logits = model(data)
+                data = model(data)
+                logits = data.y_pred
 
                 if binary:
                     y_pred = torch.sigmoid(logits)
@@ -96,14 +97,8 @@ def get_idx(dataset, split_dir, fold):
     return train_idx, test_idx
 
 
-def transform(g):
-    g.x = torch.log(degree(g.edge_index[0], g.num_nodes)).view(-1, 1)
-    g = preproc(g)
-    return g
-
-
 def get_split_data(data_name, split_dir, config, fold):
-    dataset = TUDataset(f'data/TUD/{data_name}', data_name, transform=transform)
+    dataset = TUDataset(f'data/TUD/{data_name}', data_name, transform=preproc)
 
     train_idx, test_idx = get_idx(data_name, split_dir, fold)
     np.random.shuffle(train_idx)
@@ -139,7 +134,7 @@ if __name__ == '__main__':
 
     train_iter, val_iter, _ = get_split_data(args.data, args.split_dir, config, args.fold)
 
-    model = CRaWl(model_dir, config, num_node_feat, num_edge_feat, num_classes)
+    model = CRaWl(model_dir, config, num_node_feat, num_edge_feat, num_classes, loss=CrossEntropyLoss)
     model.save()
     train(model, train_iter, val_iter)
 

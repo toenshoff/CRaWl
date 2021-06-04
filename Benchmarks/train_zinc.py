@@ -4,8 +4,8 @@ import torch
 import numpy as np
 from torch_geometric.datasets import ZINC
 import torch.nn.functional as F
+from torch.nn import L1Loss
 from torch.utils.tensorboard import SummaryWriter
-import os
 import json
 import argparse
 from data_utils import preproc, CRaWlLoader
@@ -28,14 +28,12 @@ def eval_regression(model, iter, repeats=1):
         total_samples = 0
         for data in iter:
             data.to(device)
-            y = data.y
-            y_pred = model(data)
-            err = torch.abs(y_pred - y).sum()
-            total_err += err.cpu().detach().numpy()
-            total_samples += y.shape[0]
+            data = model(data)
 
-            del data
-            torch.cuda.empty_cache()
+            err = torch.abs(data.y_pred - data.y).sum()
+            total_err += err.cpu().detach().numpy()
+            total_samples += data.y.shape[0]
+
         mae = total_err / float(total_samples)
         mae_list.append(mae)
 
@@ -44,7 +42,6 @@ def eval_regression(model, iter, repeats=1):
 
 def train_regression(model, train_iter, val_iter):
     writer = SummaryWriter(model.model_dir)
-    res_path = os.path.join(model.model_dir, 'results.json')
 
     model.to(device)
     opt = torch.optim.Adam(model.parameters(), lr=model.config['lr'], weight_decay=model.config['weight_decay'])
@@ -62,16 +59,18 @@ def train_regression(model, train_iter, val_iter):
 
         for data in train_iter:
             data = data.to(device)
-            y = data.y
+
             opt.zero_grad()
-            y_pred = model(data)
-            loss = F.l1_loss(y_pred, y, reduction='mean')
+            data = model(data)
+
+            loss = model.loss(data)
+
             loss.backward()
             opt.step()
 
-            mae = torch.abs(y_pred - y).sum()
+            mae = torch.abs(data.y_pred - data.y).sum()
             total_train_mae += mae.cpu().detach().numpy()
-            total_train_samples += y.shape[0]
+            total_train_samples += data.y.shape[0]
             train_loss.append(loss.cpu().detach().numpy())
 
         torch.cuda.empty_cache()
@@ -82,9 +81,6 @@ def train_regression(model, train_iter, val_iter):
 
         if val_mae <= best_val_mae:
             best_val_mae = val_mae
-            with open(res_path, 'w') as f:
-                json.dump({'train': {'score': float(train_mae), 'std': 0.0},
-                           'val': {'score': float(val_mae), 'std': float(val_std)}}, f, indent=4)
             model.save()
 
         print(f'Epoch {e} Loss: {train_loss:.4f}, Train: {train_mae:.4f}, Val: {val_mae:.4f} (+-{val_std:.4f})')
@@ -94,7 +90,7 @@ def train_regression(model, train_iter, val_iter):
         writer.add_scalar('MAE/val', val_mae, e)
 
         sch.step(val_mae)
-        if sch.state_dict()['_last_lr'][0] < 0.000001 or e > max_epochs:
+        if sch.state_dict()['_last_lr'][0] < 0.00001 or e > max_epochs:
             break
 
 
@@ -109,13 +105,13 @@ def load_split_data(config):
     val_data = ZINC(DATA_PATH, subset=True, split='val', transform=feat_transform, pre_transform=preproc)
 
     train_iter = CRaWlLoader(train_data, shuffle=True, batch_size=config['batch_size'], num_workers=4)
-    val_iter = CRaWlLoader(val_data, batch_size=200, num_workers=4)
+    val_iter = CRaWlLoader(val_data, batch_size=100, num_workers=4)
     return train_iter, val_iter
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default='configs/ZINC/default.json', help="path to config file")
+    parser.add_argument("--config", type=str, default='configs/ZINC/default_old.json', help="path to config file")
     parser.add_argument("--name", type=str, default='CRaWl', help="name of the model")
     parser.add_argument("--gpu", type=int, default=0, help="id of gpu to be used for training")
     parser.add_argument("--seed", type=int, default=0, help="the random seed for torch and numpy")
@@ -133,6 +129,6 @@ if __name__ == '__main__':
 
     train_iter, val_iter = load_split_data(config)
 
-    model = CRaWl(model_dir, config, num_node_feat, num_edge_feat, num_classes)
+    model = CRaWl(model_dir, config, num_node_feat, num_edge_feat, num_classes, L1Loss())
     model.save()
     train_regression(model, train_iter, val_iter)

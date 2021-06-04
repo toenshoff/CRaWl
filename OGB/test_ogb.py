@@ -9,7 +9,8 @@ import json
 import os
 from glob import glob
 import argparse
-from train_ogb import score_keys
+
+score_keys = {'MOLHIV': 'rocauc', 'MOLPCBA': 'ap'}
 
 
 def test(model, iter, repeats, steps=50):
@@ -25,9 +26,11 @@ def test(model, iter, repeats, steps=50):
         for data in iter:
             data = data.to(device)
             y_true = data.y
-            logits = model(data, steps)
 
-            y_pred = torch.sigmoid(logits).cpu().detach().numpy()
+            data = model(data, walk_steps=steps)
+
+            y_pred = torch.sigmoid(data.y_pred)
+            y_pred = y_pred.cpu().detach().numpy()
             y_true = y_true.cpu().detach().numpy()
             all_y_pred.append(y_pred)
             all_y_true.append(y_true)
@@ -50,7 +53,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_dir", type=str, default=None, help="path to config file")
-    parser.add_argument("--data", type=str, default='MOLHIV', choices={'MOLHIV', 'MOLPCBA'}, help="path to config file")
+    parser.add_argument("--data", type=str, default='ogbg-molhiv', help="path to config file")
     parser.add_argument("--reps", type=int, default=2, help="Number of eval repetitions")
     parser.add_argument("--steps", type=int, default=50, help="Number of steps in each walk")
     parser.add_argument("--batch_size", type=int, default=50, help="Batch size used for testing")
@@ -65,8 +68,8 @@ if __name__ == '__main__':
 
     model_dir = args.model_dir
     PCKL_PATH = f'data/OGB/{args.data}.pckl'
-    ogb_data_name = 'ogbg-molhiv' if args.data == 'MOLHIV' else 'ogbg-molpcba'
 
+    ogb_data_name = 'ogbg-molhiv' if args.data == 'MOLHIV' else 'ogbg-molpcba'
     score_key = score_keys[args.data]
     evaluator = Evaluator(ogb_data_name)
 
@@ -80,9 +83,12 @@ if __name__ == '__main__':
     for model_dir in model_list:
         print(f'Evaluating {model_dir}...')
         model = CRaWl.load(model_dir)
+        model.model_dir = model_dir
+        model.save()
+
         mean, std = test(model, iter, repeats=args.reps, steps=args.steps)
 
         mean_list.append(mean)
         std_list.append(std)
 
-    print(f'Mean Score {np.mean(mean_list)} (+-{np.std(mean_list)}), Mean STD {np.mean(std_list)}')
+    print(f'Mean Score {np.mean(mean_list):.5f} (+-{np.std(mean_list):.5f} CMD) (+-{np.mean(std_list):.5f} IMD)')

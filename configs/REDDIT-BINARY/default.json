@@ -1,14 +1,14 @@
 {
     "name": "default",
-    "pool": "mean",
+    "pool": "sum",
     "steps": 50,
     "win_size": 8,
     "train_start_ratio": 1.0,
     "walk_mode": "nb",
-    "hidden_dim": 64,
+    "hidden_dim": 100,
     "layers": 3,
-    "kernel_size": 5,
-    "graph_out": "linear",
+    "kernel_size": 9,
+    "graph_out": "mlp",
     "dropout": 0.0,
     "epochs": 200,
     "lr": 0.001,
@@ -17,5 +17,5 @@
     "eval_batch_size": 10,
     "decay_factor": 0.5,
     "patience": 20,
-    "eval_rep": 5
+    "eval_rep": 2
 }

@@ -2,6 +2,7 @@ import sys
 sys.path.append('.')
 import torch
 import torch.nn.functional as F
+from torch.nn import CrossEntropyLoss
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 from models import CRaWl
@@ -27,9 +28,10 @@ def eval(model, iter, repeats=1):
         for data in iter:
             data = data.to(device)
             y_true = data.y
-            logits = model(data)
+            data = model(data)
 
-            y_pred = torch.sigmoid(logits).cpu().detach().numpy()
+            y_pred = torch.sigmoid(data.y_pred)
+            y_pred = y_pred.cpu().detach().numpy()
             y_true = y_true.cpu().detach().numpy()
             all_y_pred.append(y_pred)
             all_y_true.append(y_true)
@@ -46,14 +48,13 @@ def train(model, train_iter, val_iter):
 
     model.to(device)
 
+    decay_step = model.config['decay_step']
     opt = torch.optim.Adam(model.parameters(), lr=model.config['lr'], weight_decay=model.config['weight_decay'])
-    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, factor=model.config['decay_factor'], patience=model.config['patience'], verbose=True, mode='max')
+    sch = torch.optim.lr_scheduler.MultiStepLR(opt, [decay_step], gamma=model.config['decay_factor'], verbose=True)
 
     best_val_score = 0.0
-    best_train_score = 0.0
 
     walk_start_p = model.config['train_start_ratio']
-
     max_epochs = model.config['epochs']
 
     for e in range(1, max_epochs+1):
@@ -63,19 +64,19 @@ def train(model, train_iter, val_iter):
 
         model.train()
         for data in tqdm(train_iter):
+            opt.zero_grad()
             data = data.to(device)
 
+            data = model(data, walk_start_p=walk_start_p)
             y_true = data.y
 
-            opt.zero_grad()
-            logits = model(data, walk_start_p=walk_start_p)
-            y_pred = torch.sigmoid(logits)
-
             no_nan = ~torch.isnan(y_true)
-            loss = (F.binary_cross_entropy(y_pred[no_nan], torch._cast_Float(y_true[no_nan])))
+            loss = (F.binary_cross_entropy_with_logits(data.y_pred[no_nan], torch._cast_Float(y_true[no_nan])))
+
             loss.backward()
             opt.step()
 
+            y_pred = torch.sigmoid(data.y_pred)
             y_pred = y_pred.cpu().detach().numpy()
             y_true = y_true.cpu().detach().numpy()
             all_y_pred.append(y_pred)
@@ -85,35 +86,28 @@ def train(model, train_iter, val_iter):
         score = evaluator.eval({"y_true": np.vstack(all_y_true), "y_pred": np.vstack(all_y_pred)})
         train_score = score[score_key]
         train_loss = np.mean(train_loss)
-        val_score, val_std = eval(model, val_iter, repeats=model.config['eval_rep'])
 
+        model.save(f'model_epoch_{e}')
+
+        val_score, val_std = eval(model, val_iter, repeats=model.config['eval_rep'])
         print(f'Epoch {e} Loss: {train_loss:.4f}, Train: {train_score:.4f}, Val: {val_score:.4f} (+-{val_std:.4f})')
 
         if val_score >= best_val_score:
             best_val_score = val_score
-            best_train_score = train_score
-
             model.save()
 
-            with open(res_path, 'w') as f:
-                json.dump({'train': {'score': float(train_score), 'std': 0.0},
-                           'val': {'score': float(val_score), 'std': float(val_std)}}, f, indent=4)
+        writer.add_scalar('Score/val', val_score, e)
 
         writer.add_scalar('Loss/train', train_loss, e)
         writer.add_scalar('Score/train', train_score, e)
-        writer.add_scalar('Score/val', val_score, e)
 
-        sch.step(val_score)
-        if sch.state_dict()['_last_lr'][0] < 0.00001:
-            break
-
-        torch.cuda.empty_cache()
+        sch.step()
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default='configs/MOLPCBA/default.json', help="path to config file")
+    parser.add_argument("--config", type=str, default='configs/MOLPCBA/default_old.json', help="path to config file")
     parser.add_argument("--data", type=str, default='MOLHIV', choices={'MOLHIV', 'MOLPCBA'}, help="path to config file")
     parser.add_argument("--name", type=str, default='OGB', help="path to config file")
     parser.add_argument("--gpu", type=int, default=0, help="id of gpu to be used for training")
@@ -124,6 +118,8 @@ if __name__ == '__main__':
 
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+
+    scaler = torch.cuda.amp.GradScaler()
 
     with open(args.config, 'r') as f:
         config = json.load(f)
@@ -157,9 +153,15 @@ if __name__ == '__main__':
     train_iter = CRaWlLoader(train_graphs, batch_size=config['batch_size'], shuffle=True, num_workers=10)
     valid_iter = CRaWlLoader(valid_graphs, batch_size=150, num_workers=10)
 
-    model = CRaWl(model_dir, config, num_node_feat, num_edge_feat, out_dim, node_feat_enc=AtomEncoder, edge_feat_enc=BondEncoder)
+    model = CRaWl(model_dir,
+                  config,
+                  num_node_feat,
+                  num_edge_feat,
+                  out_dim,
+                  node_feat_enc=AtomEncoder,
+                  edge_feat_enc=BondEncoder,
+                  loss=CrossEntropyLoss())
 
     print('Training...')
     train(model, train_iter, valid_iter)
-
 

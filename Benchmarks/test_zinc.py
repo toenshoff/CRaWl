@@ -25,8 +25,8 @@ def test(model, iter, repeats, steps):
         for data in iter:
             data.to(device)
             y = data.y
-            y_pred = model(data, steps)
-            err = torch.abs(y_pred - y).sum()
+            data = model(data, steps)
+            err = torch.abs(data.y_pred - y).sum()
             total_err += err.cpu().detach().numpy()
             total_samples += y.shape[0]
 
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     print('Loading Graphs...')
 
     data = ZINC(DATA_PATH, subset=True, split=args.split, transform=feat_transform, pre_transform=preproc)
-    iter = CRaWlLoader(data, batch_size=100, num_workers=4)
+    iter = CRaWlLoader(data, batch_size=50, num_workers=4)
 
     mean_list, std_list = [], []
     model_list = sorted(list(glob(args.model_dir)))
@@ -76,4 +76,4 @@ if __name__ == '__main__':
         mean_list.append(mean)
         std_list.append(std)
 
-    print(f'Mean Score {np.mean(mean_list)} (+-{np.std(mean_list)}), Mean STD {np.mean(std_list)}')
+    print(f'Mean Score {np.mean(mean_list):.5f} (+-{np.std(mean_list):.5f} CMD) (+-{np.mean(std_list):.5f} IMD)')

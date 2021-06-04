@@ -22,7 +22,8 @@ class Walker(torch.nn.Module):
         if self.compute_adj:
             self.struc_feat_dim += self.win_size - 1
 
-        self.choice_fct = Walker.uniform_choice if config['walk_mode'] == 'uniform' else Walker.nb_choice
+        self.non_backtracking = False if config['walk_mode'] == 'uniform' else True
+        self.delta = config['walk_delta'] if 'walk_delta' in config.keys() else 0.0
 
     @staticmethod
     def sample_start(start_p, graph_idx, graph_offset, order, device):
@@ -51,22 +52,7 @@ class Walker(torch.nn.Module):
         del idx, choices
         return start, start_graph
 
-    @staticmethod
-    def uniform_choice(i, walks, adj_nodes, adj_offset, choices, degrees, nb_degrees):
-        """
-        :param i: Index of the current step
-        :param walks: Tensor of vertices in the walk
-        :param adj_nodes: Adjacency List
-        :param adj_offset: Node offset in the adjacency list
-        :param choices: Cache of random integers
-        :param degrees: Degree of each node
-        :param nb_degrees: Reduced degrees for no-backtrack walks (not used here)
-        :return: A list of a chosen outgoing edge for each walk
-        """
-        return adj_offset[walks[i]] + (choices[i] % degrees[walks[i]])
-
-    @staticmethod
-    def nb_choice(i, walks, adj_nodes, adj_offset, choices, degrees, nb_degrees):
+    def unweighted_choice(self, i, walks, adj_nodes, adj_offset, degrees, nb_degrees, choices):
         """
         :param i: Index of the current step
         :param walks: Tensor of vertices in the walk
@@ -77,26 +63,27 @@ class Walker(torch.nn.Module):
         :param nb_degrees: Reduced degrees for no-backtrack walks
         :return: A list of a chosen outgoing edge for each walk
         """
-
         # do uniform step
-        old_nodes = walks[i-1]
         cur_nodes = walks[i]
         edge_idx = choices[i] % degrees[cur_nodes]
         chosen_edges = adj_offset[cur_nodes] + edge_idx
-        new_nodes = adj_nodes[chosen_edges]
 
-        # correct backtracking
-        bt = new_nodes == old_nodes
-        if bt.max():
-            bt_nodes = walks[i][bt]
-            chosen_edges[bt] = adj_offset[bt_nodes] + (edge_idx[bt] + 1 + (choices[i][bt] % nb_degrees[bt_nodes])) % degrees[bt_nodes]
+        if self.non_backtracking and i > 0:
+            old_nodes = walks[i - 1]
+            new_nodes = adj_nodes[chosen_edges]
+            # correct backtracking
+            bt = new_nodes == old_nodes
+            if bt.max():
+                bt_nodes = walks[i][bt]
+                chosen_edges[bt] = adj_offset[bt_nodes] + (edge_idx[bt] + 1 + (choices[i][bt] % nb_degrees[bt_nodes])) % degrees[bt_nodes]
+
         return chosen_edges
 
-    def sample_walks(self, data, x_edge, steps=None, start_p=1.0):
+    def sample_walks(self, data, steps=None, start_p=1.0):
         """
         :param data: Preprocessed PyTorch Geometric data object.
         :param x_edge: Edge features
-        :param steps: Number of walk steps (if None, default from config is used)
+        :param steps: Number of walk steps (if None, default_old from config is used)
         :param start_p: Probability of starting a walk at each node
         :return: The data object with the walk added as an attribute
         """
@@ -113,7 +100,7 @@ class Walker(torch.nn.Module):
         graph_offset = data.graph_offset
         order = data.order
 
-        # use default number of steps if not specified
+        # use default_old number of steps if not specified
         if steps is None:
             steps = self.steps
 
@@ -123,21 +110,21 @@ class Walker(torch.nn.Module):
         l = steps + 1
 
         # sample starting nodes
-        if start_p < 1.0:
+        if self.training and start_p < 1.0:
             start, walk_graph_idx = Walker.sample_start(start_p, graph_idx, graph_offset, order, device)
         else:
             start = torch.arange(0, n, dtype=torch.int64).view(-1)
+        start = start[degrees[start] > 0]
 
         # init tensor to hold walk indices
         w = start.shape[0]
         walks = torch.zeros((l, w), dtype=torch.int64, device=device)
         walks[0] = start
 
+        walk_edges = torch.zeros((l-1, w), dtype=torch.int64, device=device)
+
         # get all random decisions at once (faster then individual calls)
         choices = torch.randint(0, MAXINT, (steps, w), device=device)
-
-        # init feature tensors
-        edge_feat = torch.zeros((l, w, x_edge.shape[1]), dtype=torch.float32, device=device)
 
         if self.compute_id:
             id_enc = torch.zeros((l, s, w), dtype=torch.bool, device=device)
@@ -150,17 +137,13 @@ class Walker(torch.nn.Module):
         nb_degrees = nb_degree_mask * degrees + (~nb_degree_mask) * (degrees - 1)
 
         for i in range(steps):
-            # get next edges
-            if i == 0:
-                chosen_edges = self.uniform_choice(i, walks, adj_nodes, adj_offset, choices, degrees, nb_degrees)
-            else:
-                chosen_edges = self.choice_fct(i, walks, adj_nodes, adj_offset, choices, degrees, nb_degrees)
+            chosen_edges = self.unweighted_choice(i, walks, adj_nodes, adj_offset, degrees, nb_degrees, choices)
 
             # update nodes
             walks[i+1] = adj_nodes[chosen_edges]
 
             # update edge features
-            edge_feat[i + 1] = x_edge[chosen_edges]
+            walk_edges[i] = chosen_edges
 
             o = min(s, i+1)
             prev = walks[i+1-o:i+1]
@@ -177,13 +160,14 @@ class Walker(torch.nn.Module):
 
         # permute walks into the correct shapes
         data.walk_nodes = walks.permute(1, 0)
+        data.walk_edges = walk_edges.permute(1, 0)
 
         # combine id, adj and edge features
-        feat = [edge_feat.permute(1, 2, 0)]
+        feat = []
         if self.compute_id:
             feat.append(torch._cast_Float(id_enc.permute(2, 1, 0)))
         if self.compute_adj:
             feat.append(torch._cast_Float(edges.permute(2, 1, 0))[:, :-1, :])
-        data.walk_x = torch.cat(feat, dim=1)
+        data.walk_x = torch.cat(feat, dim=1) if len(feat) > 0 else None
 
         return data
