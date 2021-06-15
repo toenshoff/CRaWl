@@ -27,16 +27,6 @@ pcba_atom_labels= [[0,4,5,6,7,8,10,12,13,14,15,16,21,23,24,25,26,27,28,29,30,31,
                    [0,1],
                    [0,1]]
 
-lsc_atom_labels = [[0,1,3,4,5,6,7,8,10,11,13,14,15,16,17,19,21,29,30,31,32,33,34,52],
-                   [0,1,2],
-                   [0,1,2,3,4,5,6],
-                   [4,5,6,7,8,9],
-                   [0,1,2,3,4],
-                   [0,1,2,3,4],
-                   [0,1,2,3,4,5],
-                   [0,1],
-                   [0,1]]
-
 hiv_bond_labels = [[0,1,2,3],
                    [0],
                    [0,1]]
@@ -44,11 +34,6 @@ hiv_bond_labels = [[0,1,2,3],
 pcba_bond_labels= [[0,1,2,3],
                    [0,1,2],
                    [0,1]]
-
-lsc_bond_labels = [[0,1,2,3],
-                   [0,1,2],
-                   [0,1]]
-
 
 class OneHotEncoder(torch.nn.Module):
 
@@ -76,10 +61,6 @@ def get_pcba_encoders(device):
     return OneHotEncoder(pcba_atom_labels, full_atom_feature_dims, device), OneHotEncoder(pcba_bond_labels, full_bond_feature_dims, device)
 
 
-def get_lsc_encoders(device):
-    return OneHotEncoder(lsc_atom_labels, full_atom_feature_dims, device), OneHotEncoder(lsc_bond_labels, full_bond_feature_dims, device)
-
-
 def load_graphs(ogb_name):
 
     dataset = PygGraphPropPredDataset(ogb_name, root='data', transform=preproc)
@@ -96,7 +77,3 @@ def load_graphs(ogb_name):
 
     return out_dim, train_graphs, valid_graphs, test_graphs
 
-
-if __name__ == '__main__':
-    dataset = PygPCQM4MDataset(root='/media/jan/06eeae08-1b88-4399-b775-aaba8efa917f/home/jan/OGB/datasets')
-    print(dataset)

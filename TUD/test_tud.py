@@ -39,7 +39,7 @@ def evaluate(path):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_dir", type=str, help="path to models")
+    parser.add_argument("--model_dir", type=str, help="path to the models")
     parser.add_argument("--seed", type=int, default=0, help="the random seed for torch and numpy")
     args = parser.parse_args()
     torch.manual_seed(args.seed)

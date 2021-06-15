@@ -33,8 +33,8 @@ def load_split_data():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default='configs/MNIST/default_old.json', help="path to config file")
-    parser.add_argument("--name", type=str, default='CRaWl', help="path to config file")
+    parser.add_argument("--config", type=str, default='configs/MNIST/default.json', help="path to config file")
+    parser.add_argument("--name", type=str, default='0', help="path to config file")
     parser.add_argument("--gpu", type=int, default=0, help="id of gpu to be used for training")
     parser.add_argument("--seed", type=int, default=0, help="the random seed for torch and numpy")
     args = parser.parse_args()

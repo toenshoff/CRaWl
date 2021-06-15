@@ -112,7 +112,7 @@ def get_split_data(data_name, split_dir, config, fold):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, help="path to config file")
-    parser.add_argument("--name", type=str, default='CRaWl', help="path to config file")
+    parser.add_argument("--name", type=str, default='0', help="path to config file")
     parser.add_argument("--data", type=str, help="Name of the dataset")
     parser.add_argument("--split_dir", type=str, default='data/TUD_Val_Splits', help="Path to the dataset splits")
     parser.add_argument("--gpu", type=int, default=0, help="id of gpu to be used for training")

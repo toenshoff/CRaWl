@@ -49,9 +49,9 @@ def test(model, iter, repeats, steps):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_dir", type=str, default=None, help="path to config file")
+    parser.add_argument("--model_dir", type=str, default=None, help="path to the model directories")
     parser.add_argument("--reps", type=int, default=10, help="Number of eval repetitions")
-    parser.add_argument("--steps", type=int, default=50, help="Number of steps in each walk")
+    parser.add_argument("--steps", type=int, default=150, help="Number of steps in each walk")
     parser.add_argument("--seed", type=int, default=0, help="the random seed for torch and numpy")
     parser.add_argument("--split", type=str, default='test', choices={'test', 'val'}, help="split to evaluate on")
     args = parser.parse_args()

@@ -4,18 +4,18 @@ from models import CRaWl
 from data_utils import CRaWlLoader
 from Benchmarks.test import test
 import argparse
+from glob import glob
 import torch
 import numpy as np
-from glob import glob
 
 from Benchmarks.train_cifar import load_split_data
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_dir", type=str, help="path to config file")
+    parser.add_argument("--model_dir", type=str, help="path to the model directories")
     parser.add_argument("--reps", type=int, default=10, help="Number of eval repetitions")
-    parser.add_argument("--steps", type=int, default=50, help="Number of steps in each walk")
+    parser.add_argument("--steps", type=int, default=150, help="Number of steps in each walk")
     parser.add_argument("--seed", type=int, default=0, help="the random seed for torch and numpy")
     parser.add_argument("--split", type=str, default='test', choices={'test', 'val'}, help="split to evaluate on")
     parser.add_argument("--batch_size", type=int, default=50, help="Batch size used for testing")
