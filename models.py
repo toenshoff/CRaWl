@@ -22,7 +22,7 @@ class VNUpdate(Module):
 
     def forward(self, data):
         x = scatter_sum(data.h, data.batch, dim=0)
-        if data.vn_h is not None:
+        if 'vn_h' in data:
             x += data.vn_h
         data.vn_h = self.mlp(x)
         data.h += data.vn_h[data.batch]
@@ -73,10 +73,10 @@ class ConvModule(Module):
 
         # build walk feature tensor
         walk_node_h = data.h[walk_nodes].transpose(2, 1)
-        if data.walk_edge_h is None:
+        if 'walk_edge_h' not in data:
             padding = torch.zeros((walk_node_h.shape[0], self.edge_dim_in, 1), dtype=torch.float32, device=walk_node_h.device)
             data.walk_edge_h = torch.cat([padding, data.edge_h[data.walk_edges].transpose(2, 1)], dim=2)
-        if data.walk_x is not None:
+        if 'walk_x' in data:
             x = torch.cat([walk_node_h, data.walk_edge_h, data.walk_x], dim=1)
         else:
             x = torch.cat([walk_node_h, data.walk_edge_h], dim=1)
@@ -89,7 +89,7 @@ class ConvModule(Module):
         y_flatt = y.transpose(2, 1).reshape(flatt_dim, -1)
 
         # get center indices
-        if data.walk_nodes_flatt is None:
+        if 'walk_nodes_flatt' not in data:
             data.walk_nodes_flatt = walk_nodes[:, self.pool_node:-(self.kernel_size - 1 - self.pool_node)].reshape(-1)
 
         # pool graphlet embeddings into nodes
