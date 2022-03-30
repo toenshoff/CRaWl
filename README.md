@@ -1,10 +1,10 @@
 # CRaWl (Convolutional Neural Networks for Random Walks)
 
-This repository contains the code for training and testing CRaWl networks.
+This repository contains the code for training and testing CRaWl networks. (https://arxiv.org/abs/2102.08786)
 
 #### Installation:
 ```
-unzip CRaWl.zip
+git clone https://github.com/toenshoff/CRaWl.git
 cd CRaWl
 conda create --name crawl_env python=3.8
 conda activate crawl_env
@@ -30,3 +30,16 @@ The scripts use the same random seeds that were used to obtain the reported resu
 Note that our implementation uses scatter operations that are non-deterministic for numerical reasons.
 Training twice with the same seeds will not yield identical models, since the models will diverge through the training steps.
 We aim to solve this in future versions.
+
+### Replicate MOLPCBA Results
+
+Follow the installation procedure above and then run:
+
+```
+bash scripts/train_molpcba.sh
+bash scripts/test_molpcba.sh
+```
+
+Note that this script trains 10 models sequentially, which will take quite long.
+We recommend parallizing the indiviual training runs on multiple machines, if available.
+Before the training of the first model, it will also take a few minutes to download and preprocess the data.
