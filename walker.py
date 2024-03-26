@@ -113,7 +113,7 @@ class Walker(torch.nn.Module):
         if self.training and start_p < 1.0:
             start, walk_graph_idx = Walker.sample_start(start_p, graph_idx, graph_offset, order, device)
         else:
-            start = torch.arange(0, n, dtype=torch.int64).view(-1)
+            start = torch.arange(0, n, dtype=torch.int64).view(-1).to(device)
         start = start[degrees[start] > 0]
 
         # init tensor to hold walk indices
